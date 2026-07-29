@@ -64,3 +64,19 @@ if(voiceStatus){
     recognition.addEventListener('error',e=>{const messages={'not-allowed':'Microfone bloqueado. Autorize-o nas configurações do navegador.','no-speech':'Não ouvi nenhuma fala. Tente novamente.','audio-capture':'Nenhum microfone foi encontrado.','network':'O reconhecimento de voz não funciona neste navegador. Tente Chrome ou Edge.'};voiceStatus.className='voice-status error';voiceStatus.textContent=messages[e.error]||`Não consegui ouvir (${e.error}).`});
   }else{voiceStatus.className='voice-status error';voiceStatus.textContent='Este navegador não suporta conversa por voz. Use Chrome ou Edge.'}
 }
+
+// Half-duplex voice control: never let Lia transcribe her own audio.
+let ignoreVoiceUntil=0,lastAssistantAudio='',lastHeardAudio='',lastHeardAt=0;
+const normalizeVoice=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+const soundsLikeEcho=text=>{const heard=normalizeVoice(text),spoken=normalizeVoice(lastAssistantAudio);if(!heard||!spoken||heard.length<8)return false;if(spoken.includes(heard)||heard.includes(spoken))return true;const words=new Set(spoken.split(' ').filter(w=>w.length>2)),heardWords=heard.split(' ').filter(w=>w.length>2);return heardWords.length>3&&heardWords.filter(w=>words.has(w)).length/heardWords.length>.62};
+
+speak=function(text){
+  speechSynthesis.cancel();isSpeaking=true;lastAssistantAudio=text;ignoreVoiceUntil=Number.MAX_SAFE_INTEGER;
+  if(recognition)try{recognition.abort()}catch(e){try{recognition.stop()}catch(err){}}
+  const u=new SpeechSynthesisUtterance(text);u.lang='pt-BR';u.rate=1.12;u.pitch=1.02;
+  const voices=speechSynthesis.getVoices();u.voice=voices.find(v=>v.lang==='pt-BR'&&/female|francisca|maria/i.test(v.name))||voices.find(v=>v.lang==='pt-BR')||null;
+  const reopen=()=>{isSpeaking=false;ignoreVoiceUntil=Date.now()+1800;if(voiceOn){voiceStatus.className='voice-status';voiceStatus.textContent='A Lia terminou. Retomando o microfone…';setTimeout(startRecognition,1900)}};
+  u.onend=reopen;u.onerror=reopen;speechSynthesis.speak(u);
+};
+
+if(recognition){recognition.onresult=e=>{if(isSpeaking||Date.now()<ignoreVoiceUntil){input.value='';return}let interim='',final='';for(let i=e.resultIndex;i<e.results.length;i++){const part=e.results[i][0].transcript;if(e.results[i].isFinal)final+=part;else interim+=part}if(soundsLikeEcho(final||interim)){input.value='';voiceStatus.textContent='Eco da voz da Lia ignorado';return}const normalized=normalizeVoice(final);if(final&&normalized===lastHeardAudio&&Date.now()-lastHeardAt<5000){input.value='';return}input.value=final||interim;voiceStatus.textContent=interim?`Ouvindo: “${interim}”`:'Processando sua fala…';if(final.trim()){lastHeardAudio=normalized;lastHeardAt=Date.now();manualListening=false;submit();try{recognition.abort()}catch(err){try{recognition.stop()}catch(e){}}}}}
