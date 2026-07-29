@@ -1,0 +1,63 @@
+Exit code: 0
+Wall time: 11.3 seconds
+Output:
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="AcolÃ¡ â€” apoio emocional por voz e texto." />
+  <title>AcolÃ¡ â€” um espaÃ§o para respirar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <a class="brand" href="#"><span class="brand-mark">a</span><span>AcolÃ¡</span></a>
+      <nav><button class="nav-link" data-open="about">Como funciona</button><button class="nav-link" data-open="privacy">Privacidade</button></nav>
+      <button class="help" data-crisis>Preciso de ajuda agora</button>
+    </header>
+
+    <main>
+      <section class="intro">
+        <div class="eyebrow"><span></span> Apoio emocional, no seu ritmo</div>
+        <h1>Um espaÃ§o seguro<br>para <em>vocÃª se ouvir.</em></h1>
+        <p>Converse por voz ou texto com a Lia, uma assistente virtual criada para acolher, fazer boas perguntas e ajudar vocÃª a encontrar clareza.</p>
+        <div class="trust"><span>âœ¦</span> Gratuito <i></i><span>â—Œ</span> Para maiores de 18 anos <i></i><span>â™¢</span> VocÃª controla seus dados</div>
+      </section>
+
+      <section class="session-card" aria-label="Conversa com Lia">
+        <div class="portrait-wrap"><div class="pulse"></div><img src="lia-avatar.png" alt="Retrato ilustrativo de Lia, assistente virtual" /></div>
+        <div class="status"><span></span> Lia estÃ¡ disponÃ­vel</div>
+        <h2>Como vocÃª estÃ¡ chegando hoje?</h2>
+        <p class="sub">Pode falar do seu jeito. NÃ£o precisa organizar nada antes.</p>
+
+        <div id="chat" class="chat" aria-live="polite">
+          <div class="message lia">Oi, eu sou a Lia. Antes de comeÃ§armos: sou uma assistente virtual de apoio emocional, nÃ£o substituo uma psicÃ³loga nem realizo diagnÃ³stico clÃ­nico. O que tem ocupado mais espaÃ§o em vocÃª hoje?</div>
+        </div>
+
+        <div class="composer">
+          <textarea id="message" rows="1" placeholder="Escreva o que estÃ¡ sentindoâ€¦" aria-label="Sua mensagem"></textarea>
+          <button id="mic" class="icon-button" aria-label="Falar pelo microfone" title="Falar pelo microfone">âŒ</button>
+          <button id="send" class="send" aria-label="Enviar">âžœ</button>
+        </div>
+        <div class="voice-row"><button id="voice" class="voice"><span class="voice-icon">â—‰</span><span><b>ComeÃ§ar conversa ao vivo</b><small>Fale naturalmente, sem apertar Enter</small></span></button></div>
+        <p class="safety">A Lia pode cometer erros. Em uma emergÃªncia, procure o SAMU (192) ou ligue para o CVV (188).</p>
+      </section>
+    </main>
+
+    <section class="features">
+      <article><b>01</b><h3>Escuta sem pressa</h3><p>Um espaÃ§o para nomear sentimentos e organizar pensamentos.</p></article>
+      <article><b>02</b><h3>Ferramentas prÃ¡ticas</h3><p>RespiraÃ§Ã£o, diÃ¡rio emocional e exercÃ­cios revisados por profissionais.</p></article>
+      <article><b>03</b><h3>PrÃ³ximos passos</h3><p>Triagens orientativas e encaminhamento para cuidado humano quando necessÃ¡rio.</p></article>
+    </section>
+  </div>
+
+  <dialog id="modal"><button class="close" aria-label="Fechar">Ã—</button><div id="modal-content"></div></dialog>
+  <script src="app.js"></script>
+</body>
+</html>
+
