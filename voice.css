@@ -1,0 +1,3 @@
+.voice-status { min-height: 16px; margin-top: 9px; color: var(--muted); font-size: 11px; }
+.voice-status.live { color: #3f7c52; font-weight: 700; }
+.voice-status.error { color: #a84f38; }
