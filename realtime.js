@@ -36,6 +36,7 @@
   let userDraft = '';
   let assistantDraft = '';
   let transcriptTimer = null;
+  let connectionTimer = null;
 
   function ui(text, kind = '') {
     status.className = `voice-status ${kind}`.trim();
@@ -143,7 +144,17 @@
     let data;
     try { data = JSON.parse(event.data); } catch (_) { return; }
 
+    if (data.error) {
+      clearTimeout(connectionTimer);
+      console.error('Gemini Live recusou a sessão', data.error);
+      const reason = data.error.message || data.error.status || 'configuração recusada';
+      ui(`O Gemini não iniciou a voz: ${reason}`, 'error');
+      try { socket?.close(); } catch (_) {}
+      return;
+    }
+
     if (data.setupComplete) {
+      clearTimeout(connectionTimer);
       ready = true;
       active = true;
       setButton(true);
@@ -235,6 +246,7 @@
     socket.onmessage = handleServerMessage;
     socket.onerror = () => ui('A conexão com a IA falhou. Tente novamente.', 'error');
     socket.onclose = () => {
+      clearTimeout(connectionTimer);
       if (!stopping) {
         active = false;
         ready = false;
@@ -243,8 +255,14 @@
       }
     };
     socket.onopen = () => {
-      socket.send(JSON.stringify({ setup: { model: session.model } }));
+      socket.send(JSON.stringify({ setup: session.setup || { model: session.model } }));
       ui('Preparando a voz da Lia…', 'live');
+      connectionTimer = setTimeout(() => {
+        if (!ready) {
+          ui('O Gemini demorou para iniciar. A sessão foi reiniciada; tente novamente.', 'error');
+          try { socket?.close(); } catch (_) {}
+        }
+      }, 12000);
     };
   }
 
@@ -253,6 +271,7 @@
     active = false;
     ready = false;
     clearTimeout(transcriptTimer);
+    clearTimeout(connectionTimer);
     flushTranscripts();
     clearPlayback();
 

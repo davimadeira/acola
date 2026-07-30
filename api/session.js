@@ -68,8 +68,7 @@ export default async function handler(req, res) {
   const tokenRequest = {
     uses: 1,
     newSessionExpireTime: new Date(now + 60 * 1000).toISOString(),
-    expireTime: new Date(now + 30 * 60 * 1000).toISOString(),
-    bidiGenerateContentSetup: setup
+    expireTime: new Date(now + 30 * 60 * 1000).toISOString()
   };
 
   try {
@@ -95,6 +94,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       token: data.name,
       model: MODEL,
+      setup,
       expiresAt: tokenRequest.expireTime
     });
   } catch (error) {
