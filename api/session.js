@@ -2,13 +2,13 @@ import { LIA_INSTRUCTIONS } from './_lia-prompt.js';
 
 const MODEL = 'models/gemini-3.1-flash-live-preview';
 
-// No protocolo WebSocket, estes campos pertencem diretamente ao setup.
-// Colocá-los dentro de generationConfig faz o Gemini encerrar a sessão.
 const setup = {
   model: MODEL,
-  responseModalities: ['AUDIO'],
-  speechConfig: {
-    voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
+  generationConfig: {
+    responseModalities: ['AUDIO'],
+    speechConfig: {
+      voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
+    }
   },
   systemInstruction: { parts: [{ text: LIA_INSTRUCTIONS }] },
   inputAudioTranscription: {},
