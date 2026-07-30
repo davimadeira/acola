@@ -141,9 +141,23 @@
     nextPlaybackTime = startsAt + buffer.duration;
   }
 
-  function handleServerMessage(event) {
+  async function handleServerMessage(event) {
+    let payload = event.data;
     let data;
-    try { data = JSON.parse(event.data); } catch (_) { return; }
+
+    try {
+      if (payload instanceof Blob) {
+        payload = await payload.text();
+      } else if (payload instanceof ArrayBuffer) {
+        payload = new TextDecoder().decode(payload);
+      } else if (ArrayBuffer.isView(payload)) {
+        payload = new TextDecoder().decode(payload);
+      }
+      data = JSON.parse(payload);
+    } catch (error) {
+      console.error('Não foi possível interpretar a resposta do Gemini Live', error);
+      return;
+    }
 
     if (data.error) {
       clearTimeout(connectionTimer);
@@ -289,7 +303,7 @@
           ui(`${terminalError} Tente novamente.`, 'error');
           try { socket?.close(); } catch (_) {}
         }
-      }, 12000);
+      }, 20000);
     };
   }
 
