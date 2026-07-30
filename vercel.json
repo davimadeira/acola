@@ -1,0 +1,6 @@
+{
+  "functions": { "api/session.js": { "maxDuration": 30 } },
+  "headers": [
+    { "source": "/(.*)", "headers": [{ "key": "Permissions-Policy", "value": "microphone=(self)" }] }
+  ]
+}
