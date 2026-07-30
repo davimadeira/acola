@@ -20,6 +20,7 @@
   const WS_ENDPOINT = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained';
   const TARGET_INPUT_RATE = 16000;
   const DEFAULT_OUTPUT_RATE = 24000;
+  const MAX_RECONNECT_ATTEMPTS = 5;
 
   let socket = null;
   let mediaStream = null;
@@ -37,7 +38,12 @@
   let assistantDraft = '';
   let transcriptTimer = null;
   let connectionTimer = null;
+  let reconnectTimer = null;
   let terminalError = '';
+  let sessionData = null;
+  let sessionHandle = '';
+  let reconnectAttempts = 0;
+  let reconnecting = false;
 
   function ui(text, kind = '') {
     status.className = `voice-status ${kind}`.trim();
@@ -171,11 +177,23 @@
 
     if (data.setupComplete) {
       clearTimeout(connectionTimer);
+      const resumed = reconnecting;
+      reconnecting = false;
+      reconnectAttempts = 0;
       ready = true;
       active = true;
       setButton(true);
-      ui('Lia está pronta. Pode falar.', 'live');
+      ui(resumed ? 'Conversa retomada. Pode continuar.' : 'Lia está pronta. Pode falar.', 'live');
       return;
+    }
+
+    const resumption = data.sessionResumptionUpdate;
+    if (resumption?.resumable && resumption.newHandle) {
+      sessionHandle = resumption.newHandle;
+    }
+
+    if (data.goAway) {
+      ui('Mantendo sua conversa conectada…', 'live');
     }
 
     const content = data.serverContent;
@@ -240,6 +258,102 @@
     };
   }
 
+  function canReconnect() {
+    const expiresAt = Date.parse(sessionData?.expiresAt || '');
+    return Boolean(
+      sessionData?.token &&
+      sessionHandle &&
+      Number.isFinite(expiresAt) &&
+      expiresAt - Date.now() > 10000 &&
+      reconnectAttempts < MAX_RECONNECT_ATTEMPTS
+    );
+  }
+
+  function connectSocket(resume = false) {
+    if (!sessionData?.token) throw new Error('A sessão de voz não está disponível.');
+
+    clearTimeout(connectionTimer);
+    clearTimeout(reconnectTimer);
+    ready = false;
+    reconnecting = resume;
+
+    const currentSocket = new WebSocket(`${WS_ENDPOINT}?access_token=${encodeURIComponent(sessionData.token)}`);
+    socket = currentSocket;
+    currentSocket.onmessage = handleServerMessage;
+    currentSocket.onerror = error => {
+      console.error('Oscilação na conexão com o Gemini Live', error);
+      if (!stopping) ui('A conexão oscilou. Tentando manter a conversa…', 'live');
+    };
+    currentSocket.onclose = async event => {
+      clearTimeout(connectionTimer);
+      if (socket !== currentSocket || stopping) return;
+
+      socket = null;
+      ready = false;
+
+      if (canReconnect()) {
+        reconnectAttempts += 1;
+        reconnecting = true;
+        active = true;
+        setButton(true);
+        ui('Reconectando sem perder a conversa…', 'live');
+        reconnectTimer = setTimeout(() => {
+          if (stopping) return;
+          try { connectSocket(true); } catch (error) {
+            terminalError = String(error?.message || error);
+          }
+        }, Math.min(4000, reconnectAttempts * 700));
+        return;
+      }
+
+      active = false;
+      reconnecting = false;
+      setButton(false);
+      const closeDetail = event.reason ? `; motivo: ${event.reason}` : '';
+      const closeInfo = `código ${event.code}${closeDetail}`;
+      const diagnosis = terminalError
+        ? `${terminalError} (${closeInfo}).`
+        : `A conexão de voz foi encerrada pelo Gemini (${closeInfo}).`;
+      console.error('Gemini Live encerrou a conexão', { code: event.code, reason: event.reason || 'sem motivo informado' });
+      ui(`${diagnosis} Você pode tentar novamente.`, 'error');
+      if (processor) processor.onaudioprocess = null;
+      try { processor?.disconnect(); } catch (_) {}
+      try { inputSource?.disconnect(); } catch (_) {}
+      try { silentGain?.disconnect(); } catch (_) {}
+      mediaStream?.getTracks().forEach(track => track.stop());
+      await inputContext?.close().catch(() => {});
+      await outputContext?.close().catch(() => {});
+      sessionData = null;
+      sessionHandle = '';
+      mediaStream = null;
+      inputContext = null;
+      outputContext = null;
+      inputSource = null;
+      processor = null;
+      silentGain = null;
+    };
+    currentSocket.onopen = () => {
+      if (stopping || socket !== currentSocket || !sessionData) {
+        try { currentSocket.close(); } catch (_) {}
+        return;
+      }
+      const setup = JSON.parse(JSON.stringify(sessionData.setup || { model: sessionData.model }));
+      setup.contextWindowCompression ||= { slidingWindow: {} };
+      setup.sessionResumption = sessionHandle ? { handle: sessionHandle } : {};
+      currentSocket.send(JSON.stringify({ setup }));
+      ui(resume ? 'Retomando a conversa com a Lia…' : 'Preparando a voz da Lia…', 'live');
+      connectionTimer = setTimeout(() => {
+        if (!ready && socket === currentSocket) {
+          terminalError = resume
+            ? 'O Gemini demorou para retomar a conversa.'
+            : 'O Gemini demorou para aceitar a configuração da voz.';
+          ui(`${terminalError} Tentando novamente…`, 'error');
+          try { currentSocket.close(); } catch (_) {}
+        }
+      }, 20000);
+    };
+  }
+
   async function start() {
     if (!consent?.checked) {
       ui('Marque o consentimento de privacidade antes de começar.', 'error');
@@ -254,57 +368,14 @@
     await outputContext.resume();
 
     const response = await fetch('/api/session', { method: 'POST' });
-    const session = await response.json().catch(() => ({}));
-    if (!response.ok || !session.token) throw new Error(session.error || 'Não foi possível criar a sessão.');
+    sessionData = await response.json().catch(() => ({}));
+    if (!response.ok || !sessionData.token) throw new Error(sessionData.error || 'Não foi possível criar a sessão.');
 
+    sessionHandle = '';
+    reconnectAttempts = 0;
     await beginAudioCapture();
     ui('Conectando à Lia…', 'live');
-    socket = new WebSocket(`${WS_ENDPOINT}?access_token=${encodeURIComponent(session.token)}`);
-    socket.onmessage = handleServerMessage;
-    socket.onerror = () => {
-      if (!terminalError) terminalError = 'A conexão com a IA falhou antes de a voz iniciar.';
-      ui(terminalError, 'error');
-    };
-    socket.onclose = async event => {
-      clearTimeout(connectionTimer);
-      if (!stopping) {
-        active = false;
-        ready = false;
-        setButton(false);
-        const closeDetail = event.reason ? `; motivo: ${event.reason}` : '';
-        const closeInfo = `código ${event.code}${closeDetail}`;
-        const diagnosis = terminalError
-          ? `${terminalError} (${closeInfo}).`
-          : `A conexão de voz foi encerrada pelo Gemini (${closeInfo}).`;
-        console.error('Gemini Live encerrou a conexão', { code: event.code, reason: event.reason || 'sem motivo informado' });
-        ui(`${diagnosis} Você pode tentar novamente.`, 'error');
-        if (processor) processor.onaudioprocess = null;
-        try { processor?.disconnect(); } catch (_) {}
-        try { inputSource?.disconnect(); } catch (_) {}
-        try { silentGain?.disconnect(); } catch (_) {}
-        mediaStream?.getTracks().forEach(track => track.stop());
-        await inputContext?.close().catch(() => {});
-        await outputContext?.close().catch(() => {});
-        socket = null;
-        mediaStream = null;
-        inputContext = null;
-        outputContext = null;
-        inputSource = null;
-        processor = null;
-        silentGain = null;
-      }
-    };
-    socket.onopen = () => {
-      socket.send(JSON.stringify({ setup: session.setup || { model: session.model } }));
-      ui('Preparando a voz da Lia…', 'live');
-      connectionTimer = setTimeout(() => {
-        if (!ready) {
-          terminalError = 'O Gemini demorou para aceitar a configuração da voz.';
-          ui(`${terminalError} Tente novamente.`, 'error');
-          try { socket?.close(); } catch (_) {}
-        }
-      }, 20000);
-    };
+    connectSocket(false);
   }
 
   async function stop() {
@@ -313,6 +384,7 @@
     ready = false;
     clearTimeout(transcriptTimer);
     clearTimeout(connectionTimer);
+    clearTimeout(reconnectTimer);
     flushTranscripts();
     clearPlayback();
 
@@ -330,6 +402,10 @@
     await outputContext?.close().catch(() => {});
 
     socket = null;
+    sessionData = null;
+    sessionHandle = '';
+    reconnectAttempts = 0;
+    reconnecting = false;
     mediaStream = null;
     inputContext = null;
     outputContext = null;
@@ -347,12 +423,7 @@
     if (!active || !ready || !text || socket?.readyState !== WebSocket.OPEN) return false;
     add(text, 'user');
     message.value = '';
-    socket.send(JSON.stringify({
-      clientContent: {
-        turns: [{ role: 'user', parts: [{ text }] }],
-        turnComplete: true
-      }
-    }));
+    socket.send(JSON.stringify({ realtimeInput: { text } }));
     ui('Lia está pensando…', 'live');
     return true;
   }
