@@ -1,6 +1,6 @@
 import { LIA_INSTRUCTIONS } from './_lia-prompt.js';
 
-const MODELS = ['gemini-3.5-flash', 'gemini-2.5-flash'];
+const MODELS = ['gemini-3.5-flash', 'gemini-3.5-flash-lite'];
 const MAX_MESSAGES = 24;
 const MAX_MESSAGE_LENGTH = 4000;
 
