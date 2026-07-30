@@ -1,6 +1,7 @@
 import { LIA_INSTRUCTIONS } from './_lia-prompt.js';
 
 const MODEL = 'models/gemini-3.1-flash-live-preview';
+const SESSION_DURATION_MS = 75 * 60 * 1000;
 
 const setup = {
   model: MODEL,
@@ -11,6 +12,8 @@ const setup = {
     }
   },
   systemInstruction: { parts: [{ text: LIA_INSTRUCTIONS }] },
+  contextWindowCompression: { slidingWindow: {} },
+  sessionResumption: {},
   inputAudioTranscription: {},
   outputAudioTranscription: {}
 };
@@ -29,7 +32,7 @@ export default async function handler(req, res) {
   const tokenRequest = {
     uses: 1,
     newSessionExpireTime: new Date(now + 60 * 1000).toISOString(),
-    expireTime: new Date(now + 30 * 60 * 1000).toISOString()
+    expireTime: new Date(now + SESSION_DURATION_MS).toISOString()
   };
 
   try {
