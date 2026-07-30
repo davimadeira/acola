@@ -1,82 +1,235 @@
-const chat=document.querySelector('#chat'),input=document.querySelector('#message'),send=document.querySelector('#send'),mic=document.querySelector('#mic'),voice=document.querySelector('#voice'),voiceStatus=document.querySelector('#voice-status'),modal=document.querySelector('#modal'),modalContent=document.querySelector('#modal-content');
-let voiceOn=false,isSpeaking=false,manualListening=false,micStream=null;
-const profile=JSON.parse(localStorage.getItem('acola-profile')||'{"turns":0,"topics":{},"prefersShort":false,"name":""}');
-const pick=a=>a[Math.floor(Math.random()*a.length)];
-const greeting=/^(oi+|ol[aá]|opa|e a[ií]|bom dia|boa tarde|boa noite)([,!?.\s]*(tudo bem|como vai|tá bem|ta bem|beleza))?[,!?.\s]*$|^(tudo bem|como vai|beleza)[,!?.\s]*$/i;
-const greetingReplies=['Oi! Tudo bem por aqui — e é bom ter você comigo. Fique à vontade.','Olá! Estou aqui com você, sem pressa. Pode começar por onde fizer sentido.','Oi! Que bom que você chegou. Podemos só conversar um pouco.','Olá! Tudo bem por aqui. Este espaço é seu.'];
-const gentleReplies=['Estou aqui, acompanhando você.','Pode continuar. Não precisa organizar tudo de uma vez.','Entendi. Vamos com calma.','Isso parece importante para você. Estou ouvindo.'];
-const shortReply=/^(sim|n[aã]o|talvez|acho que sim|acho que n[aã]o|mais ou menos|um pouco)[!?.\s]*$/i;
-const themes={
-  anxiety:/ansiedad|p[aâ]nico|preocup|nervos|cora[cç][aã]o acelerado|medo|afli[cç][aã]o/i,
-  sadness:/triste|depress|sem energia|vazio|desanim|chorar|solid[aã]o/i,
-  anger:/raiva|ódio|odio|irritad|furios|revoltad/i,
-  relationship:/namor|marid|espos|relacionamento|término|termino|trai[cç]|separa/i,
-  work:/trabalho|emprego|chefe|carreira|faculdade|estudo|prova/i,
-  grief:/luto|morreu|falec|perdi alguém|perdi alguem|saudade/i,
-  sleep:/insônia|insonia|dormir|sono|acordando/i,
-  selfworth:/inútil|inutil|fracass|não sou bom|nao sou bom|culpa|vergonha/i
-};
-const reflections={
-  anxiety:['Parece que seu corpo e sua mente estão tentando antecipar algum perigo.','Dá para sentir o quanto essa preocupação está ocupando espaço.','Isso soa cansativo — como se fosse difícil desligar o estado de alerta.'],
-  sadness:['Tem um peso importante no que você está dizendo.','Parece que as coisas perderam um pouco da cor para você.','Obrigada por colocar em palavras algo que talvez esteja difícil de carregar.'],
-  anger:['Sua raiva parece estar sinalizando que algum limite importante foi atravessado.','Dá para perceber a intensidade disso em você.','Às vezes a raiva protege uma dor ou uma necessidade que não foi ouvida.'],
-  relationship:['Vínculos mexem com partes muito profundas da gente.','Parece que essa relação tem provocado sentimentos misturados.','O que aconteceu entre vocês parece ter tocado num ponto sensível.'],
-  work:['Parece que essa situação está cobrando muito de você.','Trabalho e estudo podem afetar bastante a forma como enxergamos nosso próprio valor.','Dá para sentir a pressão que você tem carregado.'],
-  grief:['Sinto muito pela sua perda. Não existe um ritmo certo para o luto.','Essa saudade diz algo sobre a importância desse vínculo.','Perder alguém pode reorganizar o mundo inteiro por dentro.'],
-  sleep:['Quando o descanso falha, tudo costuma parecer mais difícil.','Seu corpo parece estar pedindo atenção e recuperação.','Sono e emoções se alimentam mutuamente; vale olhar para os dois com cuidado.'],
-  selfworth:['Estou ouvindo uma voz interna muito dura com você.','Parece que você está medindo seu valor por um momento muito difícil.','Culpa e vergonha podem fazer uma situação parecer uma definição de quem somos.'],
-  general:['Estou com você nisso.','Quero acolher isso sem me apressar para dar uma solução.','Obrigada por confiar em mim com essa parte da sua história.','Faz sentido que isso tenha mexido com você.']
-};
-const questions={
-  anxiety:['O que costuma acontecer logo antes dessa sensação começar?','Onde você percebe isso primeiro no corpo?','Se essa preocupação pudesse falar, do que ela estaria tentando proteger você?','De zero a dez, qual é a intensidade agora?','O que já ajudou, mesmo que só um pouco, em outras vezes?'],
-  sadness:['Há quanto tempo você vem se sentindo assim?','Ainda existem pequenos momentos de alívio durante o dia?','O que ficou mais difícil de fazer ultimamente?','Tem alguém com quem você consegue dividir esse peso?','O que você sente que mais precisa agora: companhia, descanso, compreensão ou direção?'],
-  anger:['Qual limite seu parece ter sido desrespeitado?','O que existe por baixo da raiva: mágoa, medo, injustiça ou outra coisa?','O que você gostaria de conseguir comunicar sem se machucar nem machucar alguém?','Essa intensidade está aumentando ou já começou a baixar?'],
-  relationship:['O que você gostaria que essa pessoa entendesse sobre você?','Esse vínculo costuma oferecer segurança ou deixa você em alerta?','O que é responsabilidade sua e o que pertence à outra pessoa?','Que conselho você daria a alguém querido vivendo a mesma situação?'],
-  work:['Qual parte pesa mais: volume, cobrança, insegurança ou falta de sentido?','O que está sob seu controle hoje, mesmo que seja pequeno?','Essa pressão vem mais de fora ou da forma como você tem se cobrado?','O que seria um próximo passo suficientemente bom, sem precisar ser perfeito?'],
-  grief:['O que você mais sente falta nessa pessoa?','Existe alguma memória que gostaria de guardar comigo agora?','Como esse luto tem aparecido no seu corpo e na sua rotina?','Você tem conseguido viver essa perda acompanhado ou mais sozinho?'],
-  sleep:['Sua dificuldade maior é pegar no sono, continuar dormindo ou acordar sem descanso?','O que costuma passar pela sua cabeça quando você deita?','Como estão cafeína, telas e horários nas últimas semanas?','Isso acontece há quanto tempo e quantas noites por semana?'],
-  selfworth:['De quem parece ser essa voz tão crítica?','Que evidência existe contra essa conclusão dura sobre você?','Você falaria dessa forma com alguém de quem gosta?','O que esse erro diz sobre uma situação — sem transformar isso numa definição sua?'],
-  general:['Qual parte disso está mais viva em você agora?','O que aconteceu logo antes de você se sentir assim?','O que você gostaria que eu entendesse melhor?','Você quer ser apenas ouvido agora ou prefere pensarmos em um próximo passo?','Como isso tem afetado sua rotina, seu corpo e seus relacionamentos?','O que você precisa e ainda não conseguiu pedir?']
-};
-const risk=/suic[ií]d|me matar|tirar minha vida|não quero viver|nao quero viver|me machucar|ferir alguém|ferir alguem/i;
-const anxiety=/ansiedad|p[aâ]nico|preocup|nervos|cora[cç][aã]o acelerado/i;
-const sadness=/triste|depress|sem energia|vazio|desanim/i;
-function add(text,type){const el=document.createElement('div');el.className=`message ${type}`;el.textContent=text;chat.append(el);chat.scrollTop=chat.scrollHeight;if(type==='lia'&&voiceOn)speak(text)}
-function reply(text){if(risk.test(text)){setTimeout(()=>{add('Obrigada por me contar. Sua segurança vem primeiro. Você corre risco imediato ou tem um plano para se machucar agora? Se sim, ligue para o SAMU no 192 ou vá a uma emergência. Para conversar agora, ligue gratuitamente para o CVV no 188. Se puder, chame também uma pessoa de confiança para ficar com você.','lia');openCrisis()},500);return}profile.turns++;profile.prefersShort=(profile.prefersShort*3+(text.length<70))/4>.6;const name=text.match(/(?:me chamo|meu nome é|meu nome e)\s+([A-Za-zÀ-ÿ]+)/i);if(name)profile.name=name[1];let topic='general';for(const [key,re] of Object.entries(themes))if(re.test(text)){topic=key;profile.topics[key]=(profile.topics[key]||0)+1;break}localStorage.setItem('acola-profile',JSON.stringify(profile));const greeting=profile.name&&profile.turns%4===0?`${profile.name}, `:'';let r=greeting+pick(reflections[topic])+' '+pick(questions[topic]);if(/não sei|nao sei/i.test(text))r=pick(['Tudo bem não saber ainda. Podemos ir devagar.','Não precisamos encontrar uma resposta agora. Vamos apenas notar o que aparece.'])+' '+pick(questions.general);if(/obrigad/i.test(text))r=pick(['Eu que agradeço por confiar em mim.','Fico contente por poder estar com você nisso.','Você não precisa agradecer; este espaço também é seu.'])+' '+pick(['Quer continuar nesse assunto ou respirar um pouco?','Como você está se sentindo agora, comparado ao começo?']);if(profile.turns>3&&profile.topics[topic]>2)r+=` Percebo que esse tema tem aparecido mais de uma vez; podemos observar juntos o padrão, sem tirar conclusões apressadas.`;if(profile.prefersShort)r=r.split('. ').slice(0,2).join('. ');setTimeout(()=>add(r,'lia'),420+Math.min(text.length*2,500))}
-function contextualReply(text){if(risk.test(text)){reply(text);return}profile.turns++;let topic='general';for(const [key,re] of Object.entries(themes))if(re.test(text)){topic=key;profile.topics[key]=(profile.topics[key]||0)+1;break}localStorage.setItem('acola-profile',JSON.stringify(profile));let response;if(topic==='general'){response=profile.turns%3===0?pick(questions.general):pick(gentleReplies)}else{const reflection=pick(reflections[topic]);response=profile.turns%2===0?`${reflection} ${pick(questions[topic])}`:reflection}setTimeout(()=>add(response,'lia'),320+Math.min(text.length*2,450))}
-function submit(){const text=input.value.trim();if(!text)return;add(text,'user');input.value='';input.style.height='auto';if(greeting.test(text)){setTimeout(()=>add(pick(greetingReplies),'lia'),260);return}if(shortReply.test(text)){setTimeout(()=>add(pick(['Entendi. Pode continuar quando quiser.','Certo. Estou te acompanhando.','Tudo bem. Vamos no seu ritmo.','Faz sentido. Estou aqui com você.']),'lia'),250);return}contextualReply(text)}
-send.onclick=submit;input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submit()}});input.addEventListener('input',()=>{input.style.height='auto';input.style.height=Math.min(input.scrollHeight,100)+'px'});
-function speak(text){speechSynthesis.cancel();isSpeaking=true;if(recognition)try{recognition.stop()}catch(e){}const u=new SpeechSynthesisUtterance(text);u.lang='pt-BR';u.rate=1.12;u.pitch=1.02;const voices=speechSynthesis.getVoices();u.voice=voices.find(v=>v.lang==='pt-BR'&&/female|francisca|maria/i.test(v.name))||voices.find(v=>v.lang==='pt-BR')||null;u.onend=u.onerror=()=>{isSpeaking=false;if(voiceOn)startRecognition()};speechSynthesis.speak(u)}
-voice.onclick=async()=>{if(!voiceOn){try{micStream=micStream||await navigator.mediaDevices.getUserMedia({audio:true});voiceOn=true;voice.querySelector('b').textContent='Encerrar conversa ao vivo';voice.querySelector('small').textContent='Microfone ativo — fale naturalmente';speak('Estou aqui. Pode falar no seu tempo.')}catch(e){voice.querySelector('small').textContent='Permita o microfone uma vez para conversar';show('Precisamos ouvir você','<p>Autorize o microfone no aviso do navegador. Em um site publicado com HTTPS, o navegador pode lembrar sua escolha. Arquivos abertos diretamente no computador podem pedir novamente ao reabrir.</p>')}}else{voiceOn=false;voice.querySelector('b').textContent='Começar conversa ao vivo';voice.querySelector('small').textContent='Fale naturalmente, sem apertar Enter';speechSynthesis.cancel();isSpeaking=false;if(recognition)try{recognition.stop()}catch(e){}if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null}}};
-const SR=window.SpeechRecognition||window.webkitSpeechRecognition;let recognition;if(SR){recognition=new SR();recognition.lang='pt-BR';recognition.continuous=true;recognition.interimResults=true;recognition.onstart=()=>mic.classList.add('listening');recognition.onend=()=>{mic.classList.remove('listening');if(voiceOn&&!isSpeaking)setTimeout(startRecognition,250)};recognition.onerror=e=>{if(e.error==='not-allowed'){voiceOn=false;voice.querySelector('b').textContent='Começar conversa por voz';voice.querySelector('small').textContent='Permita o microfone para conversar';}else if(voiceOn&&!isSpeaking)setTimeout(startRecognition,500)};recognition.onresult=e=>{let interim='',final='';for(let i=e.resultIndex;i<e.results.length;i++){const part=e.results[i][0].transcript;if(e.results[i].isFinal)final+=part;else interim+=part}input.value=final||interim;if(final.trim()){manualListening=false;submit();try{recognition.stop()}catch(err){}}};mic.onclick=()=>{manualListening=true;startRecognition()}}else{mic.onclick=voice.onclick=()=>alert('O reconhecimento de voz não está disponível neste navegador. Tente usar Chrome ou Edge.')}
-function startRecognition(){if(recognition&&!isSpeaking)try{recognition.start()}catch(e){}}
-function show(title,html){modalContent.innerHTML=`<h2>${title}</h2>${html}`;modal.showModal()}
-function openCrisis(){show('Você não precisa passar por isso só','<p>Se houver perigo imediato, ligue para o <strong>SAMU (192)</strong>, para a emergência local ou vá ao pronto atendimento.</p><p>O <strong>CVV atende pelo 188</strong>, gratuitamente, 24 horas. Se for seguro, avise uma pessoa de confiança e não fique só.</p><p><a href="tel:188">Ligar para o CVV — 188</a></p>')}
-document.querySelectorAll('[data-crisis]').forEach(b=>b.onclick=openCrisis);document.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>b.dataset.open==='about'?show('Como a Acolá funciona','<p>A Lia oferece escuta, organização de pensamentos, psicoeducação e exercícios de bem-estar. Questionários podem indicar que uma avaliação profissional é recomendada, mas não geram diagnóstico clínico.</p><p>A conversa com IA precisa de revisão clínica, testes de segurança e encaminhamento humano antes de ser tratada como um serviço de saúde.</p>'):show('Privacidade desde o começo','<p>No modo local, as respostas são geradas no navegador. Ao ativar a conversa com Gemini, áudio e texto são enviados ao Google somente para gerar a sessão.</p><p>No plano gratuito, o Google informa que esses dados podem ser usados para melhorar seus produtos. Por isso a conversa ao vivo só começa depois do seu consentimento. Evite compartilhar informações que identifiquem você ou outras pessoas.</p><p>O histórico não é salvo pela Acolá neste protótipo. Uma versão pública precisa de política de privacidade e revisão de conformidade com a LGPD.</p>'));document.querySelector('.close').onclick=()=>modal.close();modal.onclick=e=>{if(e.target===modal)modal.close()};
+const chat = document.querySelector('#chat');
+const input = document.querySelector('#message');
+const send = document.querySelector('#send');
+const mic = document.querySelector('#mic');
+const voice = document.querySelector('#voice');
+const voiceStatus = document.querySelector('#voice-status');
+const consent = document.querySelector('#ai-consent');
+const modal = document.querySelector('#modal');
+const modalContent = document.querySelector('#modal-content');
+const onFullStack = !location.hostname.endsWith('github.io') && !location.protocol.startsWith('file');
 
-if(voiceStatus){
-  voice.addEventListener('click',()=>setTimeout(()=>{if(voiceOn&&!isSpeaking){voiceStatus.className='voice-status live';voiceStatus.textContent='Ouvindo… pode falar'}else if(!voiceOn){voiceStatus.className='voice-status';voiceStatus.textContent='Microfone desligado'}},900));
-  if(recognition){
-    recognition.addEventListener('start',()=>{voiceStatus.className='voice-status live';voiceStatus.textContent='Ouvindo… pode falar'});
-    recognition.addEventListener('speechstart',()=>{voiceStatus.textContent='Estou ouvindo você…'});
-    recognition.addEventListener('speechend',()=>{voiceStatus.textContent='Entendi. Preparando a resposta…'});
-    recognition.addEventListener('result',e=>{const last=e.results[e.results.length-1];if(last&&!last.isFinal)voiceStatus.textContent=`Ouvindo: “${last[0].transcript}”`});
-    recognition.addEventListener('error',e=>{const messages={'not-allowed':'Microfone bloqueado. Autorize-o nas configurações do navegador.','no-speech':'Não ouvi nenhuma fala. Tente novamente.','audio-capture':'Nenhum microfone foi encontrado.','network':'O reconhecimento de voz não funciona neste navegador. Tente Chrome ou Edge.'};voiceStatus.className='voice-status error';voiceStatus.textContent=messages[e.error]||`Não consegui ouvir (${e.error}).`});
-  }else{voiceStatus.className='voice-status error';voiceStatus.textContent='Este navegador não suporta conversa por voz. Use Chrome ou Edge.'}
+let voiceOn = false;
+let isSpeaking = false;
+let micStream = null;
+let pendingReply = false;
+let recognition;
+
+const firstLiaMessage = chat.querySelector('.message.lia')?.textContent.trim() || '';
+const aiHistory = firstLiaMessage ? [{ role: 'model', text: firstLiaMessage }] : [];
+const risk = /suic[ií]d|me matar|tirar minha vida|não quero viver|nao quero viver|me machucar|automutil|ferir alguém|ferir alguem/i;
+const greeting = /^(oi+|olá|ola|opa|e aí|e ai|bom dia|boa tarde|boa noite)([,!?.\s]*(tudo bem|como vai|tá bem|ta bem|beleza))?[,!?.\s]*$|^(tudo bem|como vai|beleza)[,!?.\s]*$/i;
+
+function add(text, type) {
+  const element = document.createElement('div');
+  element.className = `message ${type}`;
+  element.textContent = text;
+  chat.append(element);
+  chat.scrollTop = chat.scrollHeight;
+  if (type === 'lia' && voiceOn) speak(text);
 }
 
-// Half-duplex voice control: never let Lia transcribe her own audio.
-let ignoreVoiceUntil=0,lastAssistantAudio='',lastHeardAudio='',lastHeardAt=0;
-const normalizeVoice=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
-const soundsLikeEcho=text=>{const heard=normalizeVoice(text),spoken=normalizeVoice(lastAssistantAudio);if(!heard||!spoken||heard.length<8)return false;if(spoken.includes(heard)||heard.includes(spoken))return true;const words=new Set(spoken.split(' ').filter(w=>w.length>2)),heardWords=heard.split(' ').filter(w=>w.length>2);return heardWords.length>3&&heardWords.filter(w=>words.has(w)).length/heardWords.length>.62};
+function setConversationStatus(text, kind = '') {
+  if (!voiceStatus) return;
+  voiceStatus.className = `voice-status ${kind}`.trim();
+  voiceStatus.textContent = text;
+}
 
-speak=function(text){
-  speechSynthesis.cancel();isSpeaking=true;lastAssistantAudio=text;ignoreVoiceUntil=Number.MAX_SAFE_INTEGER;
-  if(recognition)try{recognition.abort()}catch(e){try{recognition.stop()}catch(err){}}
-  const u=new SpeechSynthesisUtterance(text);u.lang='pt-BR';u.rate=1.12;u.pitch=1.02;
-  const voices=speechSynthesis.getVoices();u.voice=voices.find(v=>v.lang==='pt-BR'&&/female|francisca|maria/i.test(v.name))||voices.find(v=>v.lang==='pt-BR')||null;
-  const reopen=()=>{isSpeaking=false;ignoreVoiceUntil=Date.now()+1800;if(voiceOn){voiceStatus.className='voice-status';voiceStatus.textContent='A Lia terminou. Retomando o microfone…';setTimeout(startRecognition,1900)}};
-  u.onend=reopen;u.onerror=reopen;speechSynthesis.speak(u);
+function crisisReply() {
+  add('Obrigada por me contar. Sua segurança vem primeiro: você corre risco imediato ou tem um plano para se machucar agora? Se sim, ligue para o SAMU no 192 ou vá a uma emergência. Para conversar agora, ligue gratuitamente para o CVV no 188 e, se puder, chame uma pessoa de confiança para ficar com você.', 'lia');
+  openCrisis();
+}
+
+function localReply(text) {
+  if (greeting.test(text)) {
+    add('Oi! Tudo bem por aqui. E você, como está?', 'lia');
+    return;
+  }
+  add('A conversa contextual com a Lia está disponível na versão publicada em acola.vercel.app. Aqui estou no modo local de demonstração.', 'lia');
+}
+
+async function requestAiReply(text) {
+  aiHistory.push({ role: 'user', text });
+  pendingReply = true;
+  send.disabled = true;
+  setConversationStatus('Lia está pensando…', 'live');
+
+  try {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: aiHistory.slice(-24) })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.reply) throw new Error(data.error || 'A Lia não conseguiu responder agora.');
+    const reply = String(data.reply).trim();
+    aiHistory.push({ role: 'model', text: reply });
+    add(reply, 'lia');
+    setConversationStatus('Pode continuar quando quiser.');
+  } catch (error) {
+    const detail = String(error?.message || 'Não foi possível conectar ao Gemini agora.');
+    add(detail, 'lia');
+    setConversationStatus(detail, 'error');
+  } finally {
+    pendingReply = false;
+    send.disabled = false;
+    input.focus();
+  }
+}
+
+async function submit() {
+  const text = input.value.trim();
+  if (!text || pendingReply) return;
+  add(text, 'user');
+  input.value = '';
+  input.style.height = 'auto';
+
+  if (risk.test(text)) {
+    crisisReply();
+    return;
+  }
+
+  if (onFullStack) {
+    if (!consent?.checked) {
+      const notice = 'Marque a autorização abaixo para eu enviar esta mensagem ao Gemini e gerar uma resposta contextual.';
+      add(notice, 'lia');
+      setConversationStatus(notice, 'error');
+      consent?.focus();
+      return;
+    }
+    await requestAiReply(text);
+    return;
+  }
+
+  localReply(text);
+}
+
+send.onclick = submit;
+input.addEventListener('keydown', event => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    submit();
+  }
+});
+input.addEventListener('input', () => {
+  input.style.height = 'auto';
+  input.style.height = `${Math.min(input.scrollHeight, 100)}px`;
+});
+
+function speak(text) {
+  speechSynthesis.cancel();
+  isSpeaking = true;
+  if (recognition) {
+    try { recognition.abort(); } catch (_) {}
+  }
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'pt-BR';
+  utterance.rate = 1.15;
+  utterance.pitch = 1.02;
+  const voices = speechSynthesis.getVoices();
+  utterance.voice = voices.find(item => item.lang === 'pt-BR' && /female|francisca|maria/i.test(item.name))
+    || voices.find(item => item.lang === 'pt-BR')
+    || null;
+  const reopen = () => {
+    isSpeaking = false;
+    if (voiceOn) setTimeout(startRecognition, 350);
+  };
+  utterance.onend = reopen;
+  utterance.onerror = reopen;
+  speechSynthesis.speak(utterance);
+}
+
+voice.onclick = async () => {
+  if (!voiceOn) {
+    try {
+      micStream = micStream || await navigator.mediaDevices.getUserMedia({ audio: true });
+      voiceOn = true;
+      voice.querySelector('b').textContent = 'Encerrar conversa ao vivo';
+      voice.querySelector('small').textContent = 'Microfone ativo — fale naturalmente';
+      speak('Estou aqui. Pode falar no seu tempo.');
+    } catch (_) {
+      voice.querySelector('small').textContent = 'Permita o microfone uma vez para conversar';
+      show('Precisamos ouvir você', '<p>Autorize o microfone no aviso do navegador. Em um site publicado com HTTPS, o navegador pode lembrar sua escolha.</p>');
+    }
+  } else {
+    voiceOn = false;
+    voice.querySelector('b').textContent = 'Começar conversa ao vivo';
+    voice.querySelector('small').textContent = 'Fale naturalmente, sem apertar Enter';
+    speechSynthesis.cancel();
+    if (recognition) {
+      try { recognition.abort(); } catch (_) {}
+    }
+    micStream?.getTracks().forEach(track => track.stop());
+    micStream = null;
+  }
 };
 
-if(recognition){recognition.onresult=e=>{if(isSpeaking||Date.now()<ignoreVoiceUntil){input.value='';return}let interim='',final='';for(let i=e.resultIndex;i<e.results.length;i++){const part=e.results[i][0].transcript;if(e.results[i].isFinal)final+=part;else interim+=part}if(soundsLikeEcho(final||interim)){input.value='';voiceStatus.textContent='Eco da voz da Lia ignorado';return}const normalized=normalizeVoice(final);if(final&&normalized===lastHeardAudio&&Date.now()-lastHeardAt<5000){input.value='';return}input.value=final||interim;voiceStatus.textContent=interim?`Ouvindo: “${interim}”`:'Processando sua fala…';if(final.trim()){lastHeardAudio=normalized;lastHeardAt=Date.now();manualListening=false;submit();try{recognition.abort()}catch(err){try{recognition.stop()}catch(e){}}}}}
+const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SpeechRecognitionApi) {
+  recognition = new SpeechRecognitionApi();
+  recognition.lang = 'pt-BR';
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.onstart = () => {
+    mic.classList.add('listening');
+    setConversationStatus('Ouvindo… pode falar', 'live');
+  };
+  recognition.onend = () => {
+    mic.classList.remove('listening');
+    if (voiceOn && !isSpeaking) setTimeout(startRecognition, 350);
+  };
+  recognition.onerror = event => {
+    const messages = {
+      'not-allowed': 'Microfone bloqueado. Autorize-o nas configurações do navegador.',
+      'no-speech': 'Não ouvi nenhuma fala. Tente novamente.',
+      'audio-capture': 'Nenhum microfone foi encontrado.',
+      'network': 'O reconhecimento de voz falhou neste navegador.'
+    };
+    setConversationStatus(messages[event.error] || `Não consegui ouvir (${event.error}).`, 'error');
+  };
+  recognition.onresult = event => {
+    if (isSpeaking) return;
+    let interim = '';
+    let final = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const part = event.results[i][0].transcript;
+      if (event.results[i].isFinal) final += part;
+      else interim += part;
+    }
+    input.value = final || interim;
+    setConversationStatus(interim ? `Ouvindo: “${interim}”` : 'Processando sua fala…', 'live');
+    if (final.trim()) {
+      submit();
+      try { recognition.abort(); } catch (_) {}
+    }
+  };
+  mic.onclick = startRecognition;
+} else {
+  mic.onclick = () => alert('O reconhecimento de voz não está disponível neste navegador. Tente Chrome ou Edge.');
+}
+
+function startRecognition() {
+  if (recognition && !isSpeaking) {
+    try { recognition.start(); } catch (_) {}
+  }
+}
+
+function show(title, html) {
+  modalContent.innerHTML = `<h2>${title}</h2>${html}`;
+  modal.showModal();
+}
+
+function openCrisis() {
+  show('Você não precisa passar por isso só', '<p>Se houver perigo imediato, ligue para o <strong>SAMU (192)</strong>, para a emergência local ou vá ao pronto atendimento.</p><p>O <strong>CVV atende pelo 188</strong>, gratuitamente, 24 horas. Se for seguro, avise uma pessoa de confiança e não fique só.</p><p><a href="tel:188">Ligar para o CVV — 188</a></p>');
+}
+
+document.querySelectorAll('[data-crisis]').forEach(button => { button.onclick = openCrisis; });
+document.querySelectorAll('[data-open]').forEach(button => {
+  button.onclick = () => button.dataset.open === 'about'
+    ? show('Como a Acolá funciona', '<p>A Lia oferece escuta, organização de pensamentos, psicoeducação e exercícios de bem-estar. Ela pode explorar hipóteses e triagens, mas não substitui avaliação nem diagnóstico clínico profissional.</p>')
+    : show('Privacidade desde o começo', '<p>Ao ativar a conversa com Gemini, áudio e texto são enviados ao Google somente para gerar a sessão.</p><p>No plano gratuito, o Google informa que esses dados podem ser usados para melhorar seus produtos. Evite compartilhar informações que identifiquem você ou outras pessoas.</p><p>O histórico não é salvo pela Acolá neste protótipo.</p>');
+});
+document.querySelector('.close').onclick = () => modal.close();
+modal.onclick = event => { if (event.target === modal) modal.close(); };
+
+window.add = add;

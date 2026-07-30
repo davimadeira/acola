@@ -37,6 +37,7 @@
   let assistantDraft = '';
   let transcriptTimer = null;
   let connectionTimer = null;
+  let terminalError = '';
 
   function ui(text, kind = '') {
     status.className = `voice-status ${kind}`.trim();
@@ -148,7 +149,8 @@
       clearTimeout(connectionTimer);
       console.error('Gemini Live recusou a sessÃ£o', data.error);
       const reason = data.error.message || data.error.status || 'configuraÃ§Ã£o recusada';
-      ui(`O Gemini nÃ£o iniciou a voz: ${reason}`, 'error');
+      terminalError = `O Gemini nÃ£o iniciou a voz: ${reason}`;
+      ui(terminalError, 'error');
       try { socket?.close(); } catch (_) {}
       return;
     }
@@ -232,123 +234,5 @@
     }
 
     stopping = false;
-    ui('Criando uma sessÃ£o seguraâ€¦', 'live');
-    outputContext = new AudioContext({ sampleRate: DEFAULT_OUTPUT_RATE });
-    await outputContext.resume();
-
-    const response = await fetch('/api/session', { method: 'POST' });
-    const session = await response.json().catch(() => ({}));
-    if (!response.ok || !session.token) throw new Error(session.error || 'NÃ£o foi possÃ­vel criar a sessÃ£o.');
-
-    await beginAudioCapture();
-    ui('Conectando Ã  Liaâ€¦', 'live');
-    socket = new WebSocket(`${WS_ENDPOINT}?access_token=${encodeURIComponent(session.token)}`);
-    socket.onmessage = handleServerMessage;
-    socket.onerror = () => ui('A conexÃ£o com a IA falhou. Tente novamente.', 'error');
-    socket.onclose = () => {
-      clearTimeout(connectionTimer);
-      if (!stopping) {
-        active = false;
-        ready = false;
-        setButton(false);
-        ui('A conversa foi encerrada. VocÃª pode iniciar outra.', 'error');
-      }
-    };
-    socket.onopen = () => {
-      socket.send(JSON.stringify({ setup: session.setup || { model: session.model } }));
-      ui('Preparando a voz da Liaâ€¦', 'live');
-      connectionTimer = setTimeout(() => {
-        if (!ready) {
-          ui('O Gemini demorou para iniciar. A sessÃ£o foi reiniciada; tente novamente.', 'error');
-          try { socket?.close(); } catch (_) {}
-        }
-      }, 12000);
-    };
-  }
-
-  async function stop() {
-    stopping = true;
-    active = false;
-    ready = false;
-    clearTimeout(transcriptTimer);
-    clearTimeout(connectionTimer);
-    flushTranscripts();
-    clearPlayback();
-
-    if (socket?.readyState === WebSocket.OPEN) {
-      try { socket.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } })); } catch (_) {}
-      try { socket.close(1000, 'SessÃ£o encerrada pela pessoa'); } catch (_) {}
-    }
-
-    if (processor) processor.onaudioprocess = null;
-    try { processor?.disconnect(); } catch (_) {}
-    try { inputSource?.disconnect(); } catch (_) {}
-    try { silentGain?.disconnect(); } catch (_) {}
-    mediaStream?.getTracks().forEach(track => track.stop());
-    await inputContext?.close().catch(() => {});
-    await outputContext?.close().catch(() => {});
-
-    socket = null;
-    mediaStream = null;
-    inputContext = null;
-    outputContext = null;
-    inputSource = null;
-    processor = null;
-    silentGain = null;
-    playbackSources = new Set();
-    nextPlaybackTime = 0;
-    setButton(false);
-    ui('Microfone desligado');
-  }
-
-  function sendText() {
-    const text = message.value.trim();
-    if (!active || !ready || !text || socket?.readyState !== WebSocket.OPEN) return false;
-    add(text, 'user');
-    message.value = '';
-    socket.send(JSON.stringify({
-      clientContent: {
-        turns: [{ role: 'user', parts: [{ text }] }],
-        turnComplete: true
-      }
-    }));
-    ui('Lia estÃ¡ pensandoâ€¦', 'live');
-    return true;
-  }
-
-  button.onclick = async () => {
-    if (active || socket) {
-      await stop();
-      return;
-    }
-    try {
-      await start();
-    } catch (error) {
-      await stop();
-      const detail = String(error?.message || '');
-      if (detail.includes('GEMINI_API_KEY')) ui('A chave do Gemini ainda nÃ£o foi ativada no servidor.', 'error');
-      else if (detail.includes('limite gratuito')) ui(detail, 'error');
-      else if (/NotAllowedError|Permission denied/i.test(detail)) ui('Autorize o microfone nas configuraÃ§Ãµes do navegador.', 'error');
-      else ui(detail || 'NÃ£o consegui iniciar. Verifique a conexÃ£o e o microfone.', 'error');
-    }
-  };
-
-  sendButton.onclick = event => {
-    if (sendText()) event.preventDefault();
-    else if (socket) ui('Espere a Lia terminar de conectar antes de enviar.', 'error');
-    else localSendFallback?.call(sendButton, event);
-  };
-
-  document.addEventListener('keydown', event => {
-    if (active && event.target === message && event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      sendText();
-    }
-  }, true);
-
-  window.addEventListener('beforeunload', () => {
-    mediaStream?.getTracks().forEach(track => track.stop());
-    try { socket?.close(); } catch (_) {}
-  });
-})();
+    terminalError = '';
+    ui('Criando umuë®-¢G§²ÚîÆ­y×FW"rbbWfVçBç6†–gD¶W’’°¢WfVçBç&WfVçDFVfVÇB‚“°¢WfVçBç7F÷–ÖÖVF–FU&÷vF–öâ‚“°¢6VæEFW‡B‚“°¢Ð¢ÒÂG'VR“° ¢v–æF÷ræFDWfVçDÆ—7FVæW"‚v&Vf÷&WVæÆöBrÂ‚’Óâ°¢ÖVF–7G&VÓòævWEG&6·2‚’æf÷$V6‚‡G&6²ÓâG&6²ç7F÷‚’“°¢G'’²6ö6¶WCòæ6Æ÷6R‚“²Ò6F6‚…ò’·Ð¢Ò“°§Ò’‚“°
