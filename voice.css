@@ -1,3 +1,4 @@
 .voice-status { min-height: 16px; margin-top: 9px; color: var(--muted); font-size: 11px; }
 .voice-status.live { color: #3f7c52; font-weight: 700; }
 .voice-status.error { color: #a84f38; }
+.ai-consent{display:flex;align-items:flex-start;gap:9px;margin:12px 2px 8px;color:#667168;font-size:12px;line-height:1.42;text-align:left}.ai-consent input{margin-top:2px;accent-color:#3f6654;flex:0 0 auto}.ai-consent span{max-width:100%}
