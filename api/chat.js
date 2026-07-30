@@ -49,10 +49,11 @@ export default async function handler(req, res) {
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      console.error('Falha na conversa com Gemini', response.status, data?.error?.status || 'sem_status');
+      const providerCode = data?.error?.status || `HTTP_${response.status}`;
+      console.error('Falha na conversa com Gemini', response.status, providerCode);
       const error = response.status === 429
         ? 'O limite gratuito do Gemini foi atingido. Aguarde um pouco e tente novamente.'
-        : 'A Lia não conseguiu responder agora. Tente novamente em instantes.';
+        : `A Lia não conseguiu responder agora (${providerCode}). Tente novamente em instantes.`;
       return res.status(response.status || 502).json({ error });
     }
 
