@@ -1,6 +1,6 @@
 import { LIA_INSTRUCTIONS } from './_lia-prompt.js';
 
-const MODEL = 'gemini-3.5-flash';
+const MODELS = ['gemini-3.5-flash', 'gemini-2.5-flash'];
 const MAX_MESSAGES = 24;
 const MAX_MESSAGE_LENGTH = 4000;
 
@@ -31,23 +31,34 @@ export default async function handler(req, res) {
   }
 
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': process.env.GEMINI_API_KEY
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: LIA_INSTRUCTIONS }] },
-        contents: messages.map(item => ({
-          role: item.role,
-          parts: [{ text: item.text }]
-        })),
-        generationConfig: { maxOutputTokens: 2048 }
-      })
+    const requestBody = JSON.stringify({
+      systemInstruction: { parts: [{ text: LIA_INSTRUCTIONS }] },
+      contents: messages.map(item => ({
+        role: item.role,
+        parts: [{ text: item.text }]
+      })),
+      generationConfig: { maxOutputTokens: 2048 }
     });
 
-    const data = await response.json().catch(() => ({}));
+    let response;
+    let data;
+    let selectedModel = MODELS[0];
+    for (const model of MODELS) {
+      selectedModel = model;
+      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': process.env.GEMINI_API_KEY
+        },
+        body: requestBody
+      });
+      data = await response.json().catch(() => ({}));
+      const temporarilyUnavailable = response.status >= 500 || data?.error?.status === 'UNAVAILABLE';
+      if (response.ok || !temporarilyUnavailable) break;
+      console.warn('Modelo Gemini indisponível; tentando alternativa', model);
+    }
+
     if (!response.ok) {
       const providerCode = data?.error?.status || `HTTP_${response.status}`;
       console.error('Falha na conversa com Gemini', response.status, providerCode);
@@ -67,7 +78,7 @@ export default async function handler(req, res) {
     }
 
     res.setHeader('Cache-Control', 'no-store, max-age=0');
-    return res.status(200).json({ reply });
+    return res.status(200).json({ reply, model: selectedModel });
   } catch (error) {
     console.error('Erro de rede na conversa com Gemini', error?.message || error);
     return res.status(502).json({ error: 'Não foi possível conectar ao Gemini agora.' });
