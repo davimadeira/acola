@@ -42,7 +42,8 @@ export default async function handler(req, res) {
         contents: messages.map(item => ({
           role: item.role,
           parts: [{ text: item.text }]
-        }))
+        })),
+        generationConfig: { maxOutputTokens: 2048 }
       })
     });
 
